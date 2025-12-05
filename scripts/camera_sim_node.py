@@ -33,15 +33,14 @@ class CameraSimNode:
 
     def sim_img_callback(self, msg: Image):
        
-        #if self.mavros_connected:
+        if self.mavros_connected:
             
+            msg.header.stamp = rospy.Time.now()
           
-        msg.header.stamp = rospy.Time.now()
-            
             # Publica no tópico /sensors/...
-        self.image_pub.publish(msg)
-        #else:
-        #    pass 
+            self.image_pub.publish(msg)
+        else:
+            pass 
 
     def run(self):
         rospy.spin()
