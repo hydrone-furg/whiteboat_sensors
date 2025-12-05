@@ -1,0 +1,14 @@
+sensors:
+  - name: front_left_camera
+    type: cameras
+    params:
+      width: 640
+      height: 480
+      fov: 1.0 # Campo de visão
+    pose:
+      x: 0.75 # Posição no barco (frente)
+      y: 0.0
+      z: 1.3  # Altura
+      roll: 0.0
+      pitch: 0.0
+      yaw: 0.0_node
