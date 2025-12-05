@@ -1,0 +1,8 @@
+<launch>
+    <arg name="output" default="screen"/>
+
+    <node pkg="whiteboat_simulation" type="camera_sim_node.py" name="camera_bridge_node" output="$(arg output)">
+        
+        </node>
+
+</launch>
