@@ -1,0 +1,19 @@
+<launch>
+    <!-- Define se rodaremos o motor de câmera da simulação ou do hardware real -->
+    <arg name="sim" default="false" />
+
+    <group unless="$(arg sim)">
+        <!-- Inicia o nó da câmera real do Whiteboat -->
+        <node pkg="whiteboat_cam" type="whiteboat_cam.py" name="camera_driver_node" output="screen">
+            <!-- Defina 0 se for a webcam do notebook ou a primeira USB conectada, 1 para a segunda, etc -->
+            <param name="camera_index" value="0" />
+            <param name="wait_for_mavros" value="false" />
+        </node>
+    </group>
+
+    <group if="$(arg sim)">
+        <!-- Inicia o nó da câmera simulada integrada com VRX -->
+        <node pkg="whiteboat_cam" type="camera_sim_node.py" name="camera_sim_node" output="screen">
+        </node>
+    </group>
+</launch>

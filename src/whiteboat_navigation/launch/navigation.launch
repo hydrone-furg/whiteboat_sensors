@@ -1,0 +1,16 @@
+<launch>
+    <include file="$(find whiteboat_core)/launch/whiteboat.launch" />
+
+    <node pkg="rosbag" type="record" name="rosbag_recorder"
+          output="screen"
+          args="-o $(find whiteboat_navigation)/bags/whiteboat_mission
+                /whiteboat/mavros/state
+                /whiteboat/mavros/global_position/fix
+                /whiteboat/mavros/imu/data
+                /whiteboat/mavros/rc/in
+                /whiteboat/tf
+                /whiteboat/tf_static
+                /whiteboat/diagnostics" 
+    />
+
+</launch>
