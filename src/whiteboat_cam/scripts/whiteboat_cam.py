@@ -1,104 +1,112 @@
-    #!/usr/bin/env python3
+#!/usr/bin/env python3
 
-import rospy
+import rclpy
+from rclpy.node import Node
 import cv2
 from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image
 from mavros_msgs.msg import State
 
-class WhiteboatCam:
+
+class WhiteboatCam(Node):
     def __init__(self):
+        super().__init__('camera_driver_node')
+
         self.MAVROS_STATE_TOPIC = '/whiteboat/mavros/state'
         self.CAMERA_TOPIC = '/whiteboat/sensors/camera/image_raw'
-        
-        # Aqui fica as configurações da câmera
-        # O índice da câmera pode ser definido pelo launch file (default: 0)
-        self.CAMERA_INDEX = rospy.get_param('~camera_index', 0)
-        self.WAIT_FOR_MAVROS = rospy.get_param('~wait_for_mavros', True)
+
+        # Parâmetros configuráveis via launch ou CLI
+        self.declare_parameter('camera_index', 0)
+        self.declare_parameter('wait_for_mavros', True)
+
+        self.CAMERA_INDEX = self.get_parameter('camera_index').value
+        self.WAIT_FOR_MAVROS = self.get_parameter('wait_for_mavros').value
         self.FRAME_WIDTH = 640
         self.FRAME_HEIGHT = 480
-        
-        
-        # Incializa os Publishers e Subscribers
-        self.image_pub = rospy.Publisher(self.CAMERA_TOPIC, Image, queue_size=10)
-        self.mavros_state_sub = rospy.Subscriber(self.MAVROS_STATE_TOPIC, State, self.state_callback)
+
+        # Publishers e Subscribers
+        self.image_pub = self.create_publisher(Image, self.CAMERA_TOPIC, 10)
+        self.mavros_state_sub = self.create_subscription(
+            State, self.MAVROS_STATE_TOPIC, self.state_callback, 10
+        )
 
         # Inicializa a câmera
         self.bridge = CvBridge()
         self.cap = cv2.VideoCapture(self.CAMERA_INDEX)
-        
-        # Configura a resolução da captura
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.FRAME_WIDTH)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.FRAME_HEIGHT)
 
-        # Controle de Estado (copiei do teu código 'square')
+        # Controle de estado
         self.mavros_connected = False
-        self.current_mode = "UNKNOWN"
-        
-        rospy.on_shutdown(self.shutdown)
-        rospy.loginfo("Nó de Câmera iniciado. Aguardando conexão com MAVROS...")
+        self.current_mode = 'UNKNOWN'
+        self._mode_logged = False
+
+        # Timer a 30 FPS
+        self.timer = self.create_timer(1.0 / 30.0, self.run)
+
+        self.get_logger().info('Nó de Câmera iniciado. Aguardando conexão com MAVROS...')
 
     def state_callback(self, msg: State):
         self.mavros_connected = msg.connected
-        rospy.loginfo_once(f"Modo atual: {msg.mode}")
+        if not self._mode_logged:
+            self.get_logger().info(f'Modo atual: {msg.mode}')
+            self._mode_logged = True
 
-    # Verifica se está tudo certo e converte Opencv em Ros message
     def capture_and_publish(self):
         if not self.cap.isOpened():
-            rospy.logerr_throttle(5, "ERRO: Não foi possível acessar a câmera.")
+            self.get_logger().error(
+                'ERRO: Não foi possível acessar a câmera.',
+                throttle_duration_sec=5
+            )
             return
 
         ret, frame = self.cap.read()
-        
+
         if ret:
             try:
-                # Converte a imagem do OpenCV para Ros
-                ros_image_msg = self.bridge.cv2_to_imgmsg(frame, "bgr8")
-                ros_image_msg.header.stamp = rospy.Time.now()
-                ros_image_msg.header.frame_id = "camera_link"
-
+                ros_image_msg = self.bridge.cv2_to_imgmsg(frame, 'bgr8')
+                ros_image_msg.header.stamp = self.get_clock().now().to_msg()
+                ros_image_msg.header.frame_id = 'camera_link'
                 self.image_pub.publish(ros_image_msg)
-                
             except CvBridgeError as e:
-                rospy.logerr(f"Erro na conversão CvBridge: {e}")
+                self.get_logger().error(f'Erro na conversão CvBridge: {e}')
         else:
-            rospy.logwarn_throttle(2, "Falha ao capturar frame da câmera.")
+            self.get_logger().warn(
+                'Falha ao capturar frame da câmera.',
+                throttle_duration_sec=2
+            )
 
     def show_image(self, frame):
-        cv2.imshow("Whiteboat Camera", frame)
+        cv2.imshow('Whiteboat Camera', frame)
         cv2.waitKey(1)
 
-    # Desliga o Node
     def shutdown(self):
-        rospy.loginfo_once("Desligando câmera e liberando recursos...")
+        self.get_logger().info('Desligando câmera e liberando recursos...')
         if self.cap.isOpened():
             self.cap.release()
 
     def run(self):
         if self.WAIT_FOR_MAVROS and not self.mavros_connected:
-            rospy.loginfo_throttle(5, "Aguardando conexão com a Pixhawk via MAVROS...")
+            self.get_logger().info(
+                'Aguardando conexão com a Pixhawk via MAVROS...',
+                throttle_duration_sec=5
+            )
             return
-
         self.capture_and_publish()
 
-def main():
-    rospy.init_node('camera_driver_node', anonymous=True)
-    
-    # Frequência de publicação (30 FPS)
-    rate = rospy.Rate(30) 
-    
+
+def main(args=None):
+    rclpy.init(args=args)
     camera = WhiteboatCam()
-
     try:
-        while not rospy.is_shutdown():
-            camera.run()
-            camera.show_image(camera.cap.read()[1])
-            rate.sleep()
-
-    except rospy.ROSInterruptException:
+        rclpy.spin(camera)
+    except KeyboardInterrupt:
         pass
     finally:
         camera.shutdown()
+        camera.destroy_node()
+        rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

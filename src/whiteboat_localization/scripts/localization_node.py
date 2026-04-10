@@ -1,67 +1,73 @@
 #!/usr/bin/env python3
 
-import rospy
+import rclpy
+from rclpy.node import Node
 from sensor_msgs.msg import NavSatFix, Imu
 from geographic_msgs.msg import GeoPoseStamped
 # TODO: import whiteboat_sensors
 
-class LocalizationNode:
+
+class LocalizationNode(Node):
     def __init__(self):
-        self.GPS_TOPIC = '/whiteboat/mavros/sensors/gps/gps/fix' # TODO: integrate to wb_sensors
-        self.IMU_TOPIC = '/whiteboat/mavros/sensors/imu/imu/data' # TODO: integrate to wb_sensors
-        self.GEOPOSE_TOPIC = '/whiteboat/mavros/global_position/global' # TODO: integrate to wb_sensors
+        super().__init__('localization_node')
+
+        self.GPS_TOPIC = '/whiteboat/mavros/sensors/gps/gps/fix'   # TODO: integrate to wb_sensors
+        self.IMU_TOPIC = '/whiteboat/mavros/sensors/imu/imu/data'   # TODO: integrate to wb_sensors
+        self.GEOPOSE_TOPIC = '/whiteboat/mavros/global_position/global'  # TODO: integrate to wb_sensors
 
         self.latest_gps = None
         self.latest_imu = None
 
-        self.geopose_pub = rospy.Publisher(self.GEOPOSE_TOPIC, GeoPoseStamped, queue_size=10)
-        self.gps_sub = rospy.Subscriber(self.GPS_TOPIC, NavSatFix, self.gps_callback)
-        self.imu_sub = rospy.Subscriber(self.IMU_TOPIC, Imu, self.imu_callback)
+        self.geopose_pub = self.create_publisher(GeoPoseStamped, self.GEOPOSE_TOPIC, 10)
+        self.gps_sub = self.create_subscription(NavSatFix, self.GPS_TOPIC, self.gps_callback, 10)
+        self.imu_sub = self.create_subscription(Imu, self.IMU_TOPIC, self.imu_callback, 10)
 
-        rospy.on_shutdown(self.shutdown)
-        rospy.loginfo("Nó de localização iniciado.")
-        rospy.loginfo("Aguardando GPS e IMU...")
+        # Timer a 10 Hz
+        self.timer = self.create_timer(1.0 / 10.0, self.run)
 
-    def gps_callback(self, msg):
+        self.get_logger().info('Nó de localização iniciado.')
+        self.get_logger().info('Aguardando GPS e IMU...')
+
+    def gps_callback(self, msg: NavSatFix):
         if msg.status.status >= 0:
             if self.latest_gps is None:
-                rospy.loginfo("Mensagem de GPS recebido.")
+                self.get_logger().info('Mensagem de GPS recebido.')
             self.latest_gps = msg
 
-    def imu_callback(self, msg):
+    def imu_callback(self, msg: Imu):
         if self.latest_imu is None:
-            rospy.loginfo("Mensagem de IMU recebido.")
+            self.get_logger().info('Mensagem de IMU recebido.')
         self.latest_imu = msg
 
     def run(self):
         if self.latest_gps is not None and self.latest_imu is not None:
             geo_pose_msg = GeoPoseStamped()
 
-            geo_pose_msg.header.stamp = rospy.Time.now()
-            geo_pose_msg.header.frame_id = 'map' # 'world'/'odom'
+            geo_pose_msg.header.stamp = self.get_clock().now().to_msg()
+            geo_pose_msg.header.frame_id = 'map'  # 'world'/'odom'
             geo_pose_msg.pose.position.latitude = self.latest_gps.latitude
             geo_pose_msg.pose.position.longitude = self.latest_gps.longitude
             geo_pose_msg.pose.position.altitude = self.latest_gps.altitude
             geo_pose_msg.pose.orientation = self.latest_imu.orientation
-            
+
             self.geopose_pub.publish(geo_pose_msg)
 
     def shutdown(self):
-        rospy.loginfo("Desligando LocalizationNode...")
+        self.get_logger().info('Desligando LocalizationNode...')
 
-def main():
-    rospy.init_node('localization_node', anonymous=True)
-    localization = LocalizationNode()
-    rate = rospy.Rate(10) 
 
+def main(args=None):
+    rclpy.init(args=args)
+    node = LocalizationNode()
     try:
-        while not rospy.is_shutdown():
-            localization.run()
-            rate.sleep()
-
-    except rospy.ROSInterruptException:
-        rospy.loginfo("Programa interrompido (Ctrl+C).")
+        rclpy.spin(node)
+    except KeyboardInterrupt:
         pass
+    finally:
+        node.shutdown()
+        node.destroy_node()
+        rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
