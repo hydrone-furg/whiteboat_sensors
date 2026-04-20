@@ -13,9 +13,9 @@ class SquareNode(Node):
     def __init__(self):
         super().__init__('square_node')
 
-        self.RC_OVERRIDE_TOPIC = '/mavros/rc/override'
-        self.IMU_TOPIC = '/mavros/imu/data'
-        self.MODE_TOPIC = '/whiteboat/mavros/state'
+        self.RC_OVERRIDE_TOPIC = '/whiteboat/rc/override'
+        self.IMU_TOPIC = '/whiteboat/imu/data'
+        self.MODE_TOPIC = '/whiteboat/state'
 
         self.THRUST_NEUTRAL = 0.0
         self.THRUST_FORWARD = 20.0
@@ -31,8 +31,9 @@ class SquareNode(Node):
         self.THROTTLE_CHANNEL = 2
         self.STEERING_CHANNEL = 0
 
+        from rclpy.qos import qos_profile_sensor_data
         self.rc_override_pub = self.create_publisher(OverrideRCIn, self.RC_OVERRIDE_TOPIC, 1)
-        self.imu_sub = self.create_subscription(Imu, self.IMU_TOPIC, self.imu_callback, 10)
+        self.imu_sub = self.create_subscription(Imu, self.IMU_TOPIC, self.imu_callback, qos_profile_sensor_data)
         self.mode_sub = self.create_subscription(State, self.MODE_TOPIC, self.mode_callback, 10)
 
         self.get_logger().info('Aguardando IMU...')

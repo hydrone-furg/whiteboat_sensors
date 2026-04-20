@@ -10,22 +10,17 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/RequestDataStream.srv"
 )
 
-# Instala o módulo Python whiteboat_tools (em src/)
-ament_python_install_package(whiteboat_tools
-  PACKAGE_DIR src/whiteboat_tools
+# Instala launch files e outros recursos
+install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
 )
 
-# Instala scripts executáveis
 install(PROGRAMS
   scripts/whiteboat_node.py
   scripts/square.py
   scripts/data_stream_server.py
+  scripts/mavros_to_vrx_bridge.py
   DESTINATION lib/${PROJECT_NAME}
-)
-
-# Instala launch files e outros recursos
-install(DIRECTORY launch
-  DESTINATION share/${PROJECT_NAME}
 )
 
 ament_package()

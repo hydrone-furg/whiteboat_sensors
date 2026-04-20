@@ -18,7 +18,7 @@ class CameraSimNode(Node):
 
         # Tópicos do Whiteboat
         self.CAMERA_TOPIC = '/whiteboat/sensors/camera/image_raw'
-        self.MAVROS_STATE_TOPIC = '/whiteboat/mavros/state'
+        self.MAVROS_STATE_TOPIC = '/whiteboat/state'
 
         # Inicializa bridge e estado
         self.bridge = CvBridge()
@@ -103,7 +103,8 @@ def main(args=None):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':
