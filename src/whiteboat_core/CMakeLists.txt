@@ -10,6 +10,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/RequestDataStream.srv"
 )
 
+ament_python_install_package(whiteboat_tools PACKAGE_DIR src/whiteboat_tools)
+
 # Instala launch files e outros recursos
 install(DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}

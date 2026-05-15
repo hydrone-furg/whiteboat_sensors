@@ -12,20 +12,30 @@ class WhiteboatCam(Node):
     def __init__(self):
         super().__init__('camera_driver_node')
 
-        self.MAVROS_STATE_TOPIC = '/whiteboat/mavros/state'
+        self.MAVROS_STATE_TOPIC = '/whiteboat/state'
         self.CAMERA_TOPIC = '/whiteboat/sensors/camera/image_raw'
 
         # Parâmetros configuráveis via launch ou CLI
         self.declare_parameter('camera_index', 0)
         self.declare_parameter('wait_for_mavros', True)
+        self.declare_parameter('frame_width', 320)
+        self.declare_parameter('frame_height', 240)
+        self.declare_parameter('fps', 10.0)
+        self.declare_parameter('publish_only_when_subscribed', True)
+        self.declare_parameter('enable_preview', False)
 
         self.CAMERA_INDEX = self.get_parameter('camera_index').value
         self.WAIT_FOR_MAVROS = self.get_parameter('wait_for_mavros').value
-        self.FRAME_WIDTH = 640
-        self.FRAME_HEIGHT = 480
+        self.FRAME_WIDTH = int(self.get_parameter('frame_width').value)
+        self.FRAME_HEIGHT = int(self.get_parameter('frame_height').value)
+        self.FPS = max(0.5, float(self.get_parameter('fps').value))
+        self.PUBLISH_ONLY_WHEN_SUBSCRIBED = bool(self.get_parameter('publish_only_when_subscribed').value)
+        self.ENABLE_PREVIEW = bool(self.get_parameter('enable_preview').value)
 
         # Publishers e Subscribers
-        self.image_pub = self.create_publisher(Image, self.CAMERA_TOPIC, 10)
+        from rclpy.qos import qos_profile_sensor_data
+
+        self.image_pub = self.create_publisher(Image, self.CAMERA_TOPIC, qos_profile_sensor_data)
         self.mavros_state_sub = self.create_subscription(
             State, self.MAVROS_STATE_TOPIC, self.state_callback, 10
         )
@@ -35,24 +45,33 @@ class WhiteboatCam(Node):
         self.cap = cv2.VideoCapture(self.CAMERA_INDEX)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.FRAME_WIDTH)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.FRAME_HEIGHT)
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
         # Controle de estado
         self.mavros_connected = False
         self.current_mode = 'UNKNOWN'
-        self._mode_logged = False
+        self._last_logged_mode = None
 
-        # Timer a 30 FPS
-        self.timer = self.create_timer(1.0 / 30.0, self.run)
+        self.timer = self.create_timer(1.0 / self.FPS, self.run)
 
-        self.get_logger().info('Nó de Câmera iniciado. Aguardando conexão com MAVROS...')
+        self.get_logger().info(
+            f'Nó de Câmera iniciado: {self.FRAME_WIDTH}x{self.FRAME_HEIGHT}@{self.FPS:.1f} FPS.'
+        )
 
     def state_callback(self, msg: State):
         self.mavros_connected = msg.connected
-        if not self._mode_logged:
+        if msg.mode != self._last_logged_mode:
             self.get_logger().info(f'Modo atual: {msg.mode}')
-            self._mode_logged = True
+            self._last_logged_mode = msg.mode
 
     def capture_and_publish(self):
+        if (
+            self.PUBLISH_ONLY_WHEN_SUBSCRIBED and
+            self.image_pub.get_subscription_count() == 0 and
+            not self.ENABLE_PREVIEW
+        ):
+            return
+
         if not self.cap.isOpened():
             self.get_logger().error(
                 'ERRO: Não foi possível acessar a câmera.',
@@ -67,7 +86,10 @@ class WhiteboatCam(Node):
                 ros_image_msg = self.bridge.cv2_to_imgmsg(frame, 'bgr8')
                 ros_image_msg.header.stamp = self.get_clock().now().to_msg()
                 ros_image_msg.header.frame_id = 'camera_link'
-                self.image_pub.publish(ros_image_msg)
+                if self.image_pub.get_subscription_count() > 0:
+                    self.image_pub.publish(ros_image_msg)
+                if self.ENABLE_PREVIEW:
+                    self.show_image(frame)
             except CvBridgeError as e:
                 self.get_logger().error(f'Erro na conversão CvBridge: {e}')
         else:

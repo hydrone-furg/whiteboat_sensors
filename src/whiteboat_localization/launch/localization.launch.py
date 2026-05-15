@@ -1,11 +1,19 @@
 from launch import LaunchDescription
-from launch.actions import ExecuteProcess, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration
 from ament_index_python.packages import get_package_share_directory
 import os
 
 
 def generate_launch_description():
+    record_bag_arg = DeclareLaunchArgument(
+        'record_bag',
+        default_value='false',
+        description='Grava rosbag da missão. Desativado por padrão para reduzir I/O em hardware embarcado.'
+    )
+
     # Inclui o launch principal (MAVROS + câmera)
     whiteboat_core_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -26,18 +34,20 @@ def generate_launch_description():
                 'bags',
                 'whiteboat_mission'
             ),
-            '/whiteboat/mavros/state',
-            '/whiteboat/mavros/global_position/fix',
-            '/whiteboat/mavros/imu/data',
-            '/whiteboat/mavros/rc/in',
+            '/whiteboat/state',
+            '/whiteboat/global_position/global',
+            '/whiteboat/imu/data',
+            '/whiteboat/rc/in',
             '/whiteboat/tf',
             '/whiteboat/tf_static',
             '/whiteboat/diagnostics',
         ],
         output='screen',
+        condition=IfCondition(LaunchConfiguration('record_bag')),
     )
 
     return LaunchDescription([
+        record_bag_arg,
         whiteboat_core_launch,
         rosbag_record,
     ])
